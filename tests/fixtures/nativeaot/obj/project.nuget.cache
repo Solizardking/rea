@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "nnHBdsj6F1o=",
+  "success": true,
+  "projectFilePath": "/Users/8bit/Downloads/clawd-on-desk/rea/tests/fixtures/nativeaot/NativeAotFixture.csproj",
+  "expectedPackageFiles": [
+    "/Users/8bit/.nuget/packages/microsoft.dotnet.ilcompiler/8.0.22/microsoft.dotnet.ilcompiler.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.net.illink.tasks/8.0.22/microsoft.net.illink.tasks.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/runtime.osx-arm64.microsoft.dotnet.ilcompiler/8.0.22/runtime.osx-arm64.microsoft.dotnet.ilcompiler.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.netcore.app.ref/8.0.25/microsoft.netcore.app.ref.8.0.25.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.25/microsoft.aspnetcore.app.ref.8.0.25.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.netcore.app.runtime.osx-arm64/8.0.22/microsoft.netcore.app.runtime.osx-arm64.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.aspnetcore.app.runtime.osx-arm64/8.0.22/microsoft.aspnetcore.app.runtime.osx-arm64.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/runtime.osx-arm64.microsoft.dotnet.ilcompiler/8.0.22/runtime.osx-arm64.microsoft.dotnet.ilcompiler.8.0.22.nupkg.sha512",
+    "/Users/8bit/.nuget/packages/microsoft.netcore.app.host.osx-arm64/8.0.22/microsoft.netcore.app.host.osx-arm64.8.0.22.nupkg.sha512"
+  ],
+  "logs": []
+}
