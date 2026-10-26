@@ -1,6 +1,7 @@
 import type {
   BinaryArchitecture,
   ElfFamilyMetadata,
+  ElfOnlyArchitecture,
   HeaderArchitecture,
   MipsElfMetadata,
   PeCodeViewRecord,
@@ -58,8 +59,8 @@ export type ExecutableMetadata =
     }
   | {
       readonly format: "elf";
-      readonly architecture: "hexagon";
-      readonly availableArchitectures: readonly "hexagon"[];
+      readonly architecture: ElfOnlyArchitecture;
+      readonly availableArchitectures: readonly ElfOnlyArchitecture[];
     }
   | {
       readonly format: "mach-o";
@@ -422,7 +423,7 @@ const parseElf = (
           riscv: metadata,
         });
   }
-  if (architecture === "hexagon")
+  if (architecture === "hexagon" || architecture === "sbpf")
     return ok({
       format: "elf",
       architecture,

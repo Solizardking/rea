@@ -22,6 +22,7 @@ import type {
   AnalysisProviderCandidate,
   ProviderAvailability,
   ProviderTargetSupport,
+  RetainedResourceScope,
 } from "../application/AnalysisProvider.js";
 import type { AppConfig } from "../config/types.js";
 import type { ConfigurationError } from "../domain/configurationErrors.js";
@@ -47,10 +48,11 @@ import {
   ArtifactResourceScope,
   ArtifactResourceRetryFailure,
 } from "../artifacts/ArtifactResourceScope.js";
-import { AnalysisCleanupLease } from "../artifacts/AnalysisCleanupLease.js";
-import { AnalysisCleanupLeaseGroup } from "../artifacts/AnalysisCleanupLease.js";
+import {
+  AnalysisCleanupLease,
+  AnalysisCleanupLeaseGroup,
+} from "../artifacts/AnalysisCleanupLease.js";
 import { ProviderCleanupError } from "../domain/providerCleanupError.js";
-import type { RetainedResourceScope } from "../application/AnalysisProvider.js";
 import type { ProviderInspectionScope } from "../providers/ProviderInspectionScope.js";
 
 /** Bring-your-own IDA MCP candidate; discovery performs no provider startup. */
@@ -252,7 +254,8 @@ export class IdaProvider implements AnalysisProviderCandidate {
     if (
       target.kind === "executable" &&
       (isElfMetadataArchitecture(target.architecture) ||
-        target.architecture === "hexagon")
+        target.architecture === "hexagon" ||
+        target.architecture === "sbpf")
     )
       return {
         status: "unsupported",
@@ -264,7 +267,9 @@ export class IdaProvider implements AnalysisProviderCandidate {
               ? "RISC-V"
               : target.architecture === "powerpc"
                 ? "PowerPC"
-                : "Hexagon"
+                : target.architecture === "sbpf"
+                  ? "Solana sBPF"
+                  : "Hexagon"
         } lane. Select a supported Ghidra profile instead.`,
         diagnostics,
       };

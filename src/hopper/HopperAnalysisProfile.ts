@@ -28,6 +28,7 @@ import {
   type BinaryArchitecture,
   type BinaryTarget,
   type ElfMetadataArchitecture,
+  type ElfOnlyArchitecture,
   type HeaderArchitecture,
 } from "../domain/binaryTargetTypes.js";
 import {
@@ -204,19 +205,20 @@ const resolveHopperAnalysisProfileInScope = async (
 
 /** Ghidra owns these lanes; Hopper names the family it declines rather than guessing. */
 const HOPPER_DECLINED_ARCHITECTURE_LABELS: Record<
-  ElfMetadataArchitecture | "hexagon",
+  ElfMetadataArchitecture | ElfOnlyArchitecture,
   string
 > = {
   mips: "MIPS",
   riscv: "RISC-V",
   powerpc: "PowerPC",
   hexagon: "Hexagon",
+  sbpf: "Solana sBPF",
 };
 
 /** Families with no verified Hopper lane, declined before any loader selection. */
 export type HopperDeclinedArchitecture =
   | ElfMetadataArchitecture
-  | "hexagon"
+  | ElfOnlyArchitecture
   | "arm64_32";
 
 export const isHopperDeclinedArchitecture = (
@@ -224,6 +226,7 @@ export const isHopperDeclinedArchitecture = (
 ): architecture is HopperDeclinedArchitecture =>
   isElfMetadataArchitecture(architecture) ||
   architecture === "hexagon" ||
+  architecture === "sbpf" ||
   architecture === "arm64_32";
 
 export const hopperDeclinedArchitectureReason = (

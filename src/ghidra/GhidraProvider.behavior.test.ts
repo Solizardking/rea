@@ -262,6 +262,47 @@ it("carries the inspected release identity into the production launcher", async 
   await client.close();
 });
 
+describe("Ghidra provider ELF-only families", () => {
+  it.each([
+    ["Hexagon", 1, 164, "hexagon", "/tmp/chre_pal.so"],
+    ["Solana sBPF", 2, 263, "sbpf", "/tmp/pump_program.so"],
+    ["Solana eBPF", 2, 247, "sbpf", "/tmp/pump_program.so"],
+  ] as const)(
+    "admits parsed %s ELF targets through Ghidra profile selection and declines them on Windows",
+    async (label, elfClass, machine, architecture, path) => {
+      const parsed = parseExecutableHeader(elf(elfClass, 1, machine), "x64");
+      if (!parsed.ok) throw new Error(`Expected valid ${label} ELF target`);
+      const target: BinaryTarget = {
+        path,
+        sha256: "a".repeat(64),
+        kind: "executable",
+        ...parsed.value,
+      };
+      const ghidra = provider();
+      expect(ghidra.inspectTargetSupport(target)).toMatchObject({
+        status: "supported",
+      });
+      const resolved = await ghidra.resolveAnalysisProfile(target);
+      expect(resolved.ok && resolved.value).toMatchObject({
+        profile: {
+          parameters: {
+            target_format: "elf",
+            architecture,
+            loader: "auto-from-header",
+            language_id: "auto-from-header",
+            compiler_spec_id: "auto-default",
+          },
+        },
+      });
+      const windows = provider(installationHost("win32"));
+      expect(windows.inspectTargetSupport(target)).toMatchObject({
+        status: "unsupported",
+        code: "target_format_unsupported",
+      });
+    },
+  );
+});
+
 describe("Ghidra provider", () => {
   it("commits DOS loader and real-mode language while retaining the CPU family", async () => {
     const ghidra = provider();
@@ -291,37 +332,6 @@ describe("Ghidra provider", () => {
     });
     const windows = provider(installationHost("win32"));
     expect(windows.inspectTargetSupport(target).status).toBe("unsupported");
-  });
-  it("admits parsed Hexagon ELF targets through Ghidra profile selection and declines them on Windows", async () => {
-    const parsed = parseExecutableHeader(elf(1, 1, 164), "x64");
-    if (!parsed.ok) throw new Error("Expected valid Hexagon ELF target");
-    const target: BinaryTarget = {
-      path: "/tmp/chre_pal.so",
-      sha256: "a".repeat(64),
-      kind: "executable",
-      ...parsed.value,
-    };
-    const ghidra = provider();
-    expect(ghidra.inspectTargetSupport(target)).toMatchObject({
-      status: "supported",
-    });
-    const resolved = await ghidra.resolveAnalysisProfile(target);
-    expect(resolved.ok && resolved.value).toMatchObject({
-      profile: {
-        parameters: {
-          target_format: "elf",
-          architecture: "hexagon",
-          loader: "auto-from-header",
-          language_id: "auto-from-header",
-          compiler_spec_id: "auto-default",
-        },
-      },
-    });
-    const windows = provider(installationHost("win32"));
-    expect(windows.inspectTargetSupport(target)).toMatchObject({
-      status: "unsupported",
-      code: "target_format_unsupported",
-    });
   });
   it("re-observes the exact installation for each fresh task without launching Ghidra", async () => {
     let probeCount = 0;

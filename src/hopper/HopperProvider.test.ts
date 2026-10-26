@@ -98,6 +98,27 @@ describe("Hopper provider capabilities", () => {
       expect(support.reason).toContain("Ghidra");
     }
   });
+  it("declines Solana sBPF targets with a Ghidra-directed reason", () => {
+    const config = parseConfig({});
+    if (!config.ok) throw new Error("expected valid configuration");
+    const provider = new HopperProvider(config.value, silentLogger, {});
+    const support = provider.inspectTargetSupport({
+      path: "/tmp/pump_program.so",
+      sha256: "a".repeat(64),
+      kind: "executable",
+      format: "elf",
+      architecture: "sbpf",
+      availableArchitectures: ["sbpf"],
+    });
+    expect(support).toMatchObject({
+      status: "unsupported",
+      code: "architecture_unsupported",
+      reason: expect.stringContaining("Solana sBPF"),
+    });
+    if (support.status === "unsupported") {
+      expect(support.reason).toContain("Ghidra");
+    }
+  });
   it("declines thin arm64_32 Mach-O targets without a verified lane", () => {
     const config = parseConfig({});
     if (!config.ok) throw new Error("expected valid configuration");

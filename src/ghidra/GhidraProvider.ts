@@ -98,6 +98,7 @@ const SUPPORTED_ARCHITECTURES = new Set([
   "powerpc",
   "m68k",
   "hexagon",
+  "sbpf",
 ]);
 
 /** Ghidra candidate backed by an isolated ephemeral headless Program session. */

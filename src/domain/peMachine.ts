@@ -1,11 +1,14 @@
-import type { HeaderArchitecture } from "./binaryTargetTypes.js";
+import type {
+  ElfOnlyArchitecture,
+  HeaderArchitecture,
+} from "./binaryTargetTypes.js";
 import {
   readPeOptionalHeaderStructure,
   type PeOptionalHeaderStructure,
 } from "./peOptionalHeader.js";
 import { err, ok, type Result } from "./result.js";
 
-export type PeArchitecture = Exclude<HeaderArchitecture, "hexagon">;
+export type PeArchitecture = Exclude<HeaderArchitecture, ElfOnlyArchitecture>;
 
 /** A decoded COFF machine and whether it carried a ReadyToRun OS override. */
 export interface PeMachine {

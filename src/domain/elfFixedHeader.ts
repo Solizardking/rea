@@ -126,6 +126,10 @@ export const elfArchitecture = (
       return "hexagon";
     case 183:
       return "arm64";
+    case 247: // EM_BPF: Linux eBPF; Solana programs built before SBFv1 tooling use it.
+      return "sbpf";
+    case 263: // EM_SBF: Solana sBPF; version stays in e_flags for the analysis engine.
+      return "sbpf";
     case 243: // EM_RISCV: XLEN, byte order and e_flags remain separate ELF facts.
       return "riscv";
   }

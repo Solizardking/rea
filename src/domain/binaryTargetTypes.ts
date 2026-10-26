@@ -14,8 +14,12 @@ export const BINARY_ARCHITECTURES = [
   "powerpc",
   "m68k",
   "hexagon",
+  "sbpf",
 ] as const;
 export type BinaryArchitecture = (typeof BINARY_ARCHITECTURES)[number];
+
+/** ELF-only families recognized from e_machine with no further ELF metadata (Hexagon DSP, Solana sBPF/eBPF). */
+export type ElfOnlyArchitecture = "hexagon" | "sbpf";
 
 /**
  * Families admitted only by explicit raw-binary selection. Header detection
@@ -65,7 +69,10 @@ export const isElfMetadataArchitecture = (
 /** Recognized family with no ELF metadata member; the header alone is the fact. */
 export type HeaderArchitecture = Exclude<
   BinaryArchitecture,
-  ElfMetadataArchitecture | RawOnlyArchitecture | "hexagon" | "arm64_32"
+  | ElfMetadataArchitecture
+  | RawOnlyArchitecture
+  | ElfOnlyArchitecture
+  | "arm64_32"
 >;
 
 /** Raw ELF facts; family recognition does not establish ISA or ABI support. */
@@ -181,8 +188,8 @@ export type BinaryTarget =
   | (BinaryTargetIdentity & {
       readonly kind: "executable";
       readonly format: "elf";
-      readonly architecture: "hexagon";
-      readonly availableArchitectures: readonly "hexagon"[];
+      readonly architecture: ElfOnlyArchitecture;
+      readonly availableArchitectures: readonly ElfOnlyArchitecture[];
       readonly executableRole?: never;
       readonly managed?: never;
     })
