@@ -446,6 +446,7 @@ const workflowAvailabilityFor = ({
 }: AvailabilityContext): Availability | null => {
   if (
     name === "inspect_desktop_application" ||
+    name === "analyze_solana_program" ||
     name === "inspect_go_binary" ||
     name === "inspect_il2cpp_metadata" ||
     name === "inspect_model_artifact" ||

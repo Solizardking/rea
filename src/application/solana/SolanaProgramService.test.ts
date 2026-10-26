@@ -1,0 +1,123 @@
+import { expect, it } from "vitest";
+import { SolanaProgramService } from "./SolanaProgramService.js";
+import { AnalysisOutputError } from "../../domain/analysisErrorCore.js";
+import { parseEvidence } from "../../domain/evidence.js";
+import type { SolanaProgramAnalysis } from "../../domain/solana/solanaProgram.js";
+import { ok } from "../../domain/result.js";
+
+const identity = {
+  id: "solana-sbpf",
+  name: "Fixture Solana analyzer seam",
+  version: "1",
+};
+
+const report: SolanaProgramAnalysis = {
+  artifact: {
+    path: "/artifacts/pump_amm.so",
+    sha256: "b".repeat(64),
+    bytes: 1_048_576,
+    source: "local-file",
+    program_id: null,
+    program_data_account: null,
+    slot: null,
+  },
+  elf: {
+    bits: 64,
+    byte_order: "little",
+    elf_type: 3,
+    machine: 263,
+    machine_name: "bpf (Solana sBPF)",
+    entrypoint: 0x120,
+    program_header_count: 3,
+    section_header_count: 9,
+    trailing_bytes: 0,
+    sections: [
+      { name: ".text", type: 1, address: 0x120, offset: 288, size: 1024 },
+    ],
+  },
+  disassembly: {
+    engine: "rea-sbpf-decoder",
+    text_section: ".text",
+    instruction_count: 128,
+    unknown_opcodes: 0,
+    call_sites: 4,
+    exit_sites: 1,
+    lddw_constants: 9,
+    coverage: "complete",
+  },
+  handlers: [
+    {
+      discriminator: "c9cff3724b6f2fbd",
+      constant_address: 900392,
+      constant_file_offset: 900396,
+      comparison_address: 900408,
+      branch: "jeq",
+      branch_target: 901944,
+      value_register: 3,
+      constant_register: 4,
+    },
+  ],
+  syscalls: {
+    dynamic_symbols: ["sol_log_"],
+    defined_symbols: 2,
+    undefined_symbols: 1,
+  },
+  strings: { total: 3, relevant: [{ value: "sol_log_", file_offset: 64 }] },
+  limitations: ["Fixture limitation."],
+};
+
+const serviceWith = (value: SolanaProgramAnalysis): SolanaProgramService =>
+  new SolanaProgramService({
+    identity,
+    analyze: async () => ok(value),
+  });
+
+it("binds a validated report into artifact Evidence", async () => {
+  const result = await serviceWith(report).inspect({
+    path: "/artifacts/pump_amm.so",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const evidence = parseEvidence(result.value);
+  expect(evidence.operation).toBe("analyze_solana_program");
+  expect(evidence.subject?.digest.sha256).toBe("b".repeat(64));
+  expect(evidence.confidence).toBe("inferred");
+  const normalized = evidence.normalized_result as SolanaProgramAnalysis;
+  expect(normalized.handlers[0]?.discriminator).toBe("c9cff3724b6f2fbd");
+  expect(evidence.locations).toContainEqual({
+    kind: "file-offset",
+    offset: 900396,
+  });
+});
+
+it("rejects a report that changes the selected artifact identity", async () => {
+  const result = await serviceWith({
+    ...report,
+    artifact: { ...report.artifact, path: "/artifacts/other.so" },
+  }).inspect({ path: "/artifacts/pump_amm.so" });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error).toBeInstanceOf(AnalysisOutputError);
+});
+
+it("rejects ambiguous source selection before invoking the analyzer", async () => {
+  let calls = 0;
+  const service = new SolanaProgramService({
+    identity,
+    analyze: async () => {
+      calls += 1;
+      return ok(report);
+    },
+  });
+  const both = await service.inspect({
+    path: "/artifacts/pump_amm.so",
+    program_id: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+    out_dir: "/artifacts/out",
+  });
+  expect(both.ok).toBe(false);
+  const missingOutDir = await service.inspect({
+    program_id: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+  });
+  expect(missingOutDir.ok).toBe(false);
+  expect(calls).toBe(0);
+});
