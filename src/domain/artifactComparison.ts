@@ -14,7 +14,10 @@ import {
   parseArtifactInventoryEvidence,
   type InventorySet,
 } from "./artifactInventoryEvidence.js";
-import { pyInstallerEntryDeclaration } from "./artifactFormatMetadata.js";
+import {
+  nodeSeaEntryDeclaration,
+  pyInstallerEntryDeclaration,
+} from "./artifactFormatMetadata.js";
 import { prefixedDigestSchema } from "./../domain/digests.js";
 import { canonicalJson } from "./comparisonSemantics.js";
 
@@ -181,6 +184,16 @@ export const compareArtifacts = (
     ...(right.inventory.coverage.status === "complete"
       ? []
       : ["Right artifact inventory traversal coverage is unknown."]),
+    ...(comparison.hasUnknownAsarPacking
+      ? [
+          "ASAR packing metadata is recorded on only one side for matching paths; omitted metadata may be a legacy observation and does not establish packed or unpacked storage.",
+        ]
+      : []),
+    ...(comparison.hasUnknownNodeSeaMetadata
+      ? [
+          "Node SEA member metadata is recorded on only one side for matching paths; omitted metadata may be a legacy observation and leaves the complete runtime member declaration unavailable.",
+        ]
+      : []),
     ...(comparison.hasAmbiguousDuplicatePaths
       ? [
           "Duplicate logical paths cannot be paired across inventories; comparisons for those paths are unknown.",
@@ -241,6 +254,8 @@ const compareOccurrences = (
 ): {
   readonly changes: ArtifactChange[];
   readonly hasAmbiguousDuplicatePaths: boolean;
+  readonly hasUnknownAsarPacking: boolean;
+  readonly hasUnknownNodeSeaMetadata: boolean;
 } => {
   const leftNodes = new Map(left.nodes.map((item) => [item.artifact_id, item]));
   const rightNodes = new Map(
@@ -253,6 +268,8 @@ const compareOccurrences = (
   ].sort(compareUnicodeCodePoints);
   const output: ArtifactChange[] = [];
   let hasAmbiguousDuplicatePaths = false;
+  let hasUnknownAsarPacking = false;
+  let hasUnknownNodeSeaMetadata = false;
   for (const path of paths) {
     const leftMatches = leftByPath.get(path) ?? [];
     const rightMatches = rightByPath.get(path) ?? [];
@@ -272,6 +289,18 @@ const compareOccurrences = (
     }
     const leftOccurrence = leftMatches[0];
     const rightOccurrence = rightMatches[0];
+    if (
+      leftOccurrence !== undefined &&
+      rightOccurrence !== undefined &&
+      asarPackingUnknown({ leftOccurrence, rightOccurrence })
+    )
+      hasUnknownAsarPacking = true;
+    if (
+      leftOccurrence !== undefined &&
+      rightOccurrence !== undefined &&
+      nodeSeaMetadataUnknown({ leftOccurrence, rightOccurrence })
+    )
+      hasUnknownNodeSeaMetadata = true;
     const change = classifyPath({
       path,
       leftOccurrence,
@@ -286,7 +315,12 @@ const compareOccurrences = (
     });
     if (change !== null) output.push(change);
   }
-  return { changes: output, hasAmbiguousDuplicatePaths };
+  return {
+    changes: output,
+    hasAmbiguousDuplicatePaths,
+    hasUnknownAsarPacking,
+    hasUnknownNodeSeaMetadata,
+  };
 };
 
 const occurrencesByPath = (
@@ -384,9 +418,20 @@ const classifyPath = (input: ClassifyPathInput): ArtifactChange | null => {
   const declaration = classifyPyInstallerDeclaration(input, base);
   if (declaration.handled) return declaration.change;
   const availability = classifyAvailability(input, base);
-  if (availability !== null) return availability;
+  if (availability !== null)
+    return asarPackingChanged(input) || nodeSeaMetadataChanged(input)
+      ? {
+          ...base,
+          classification: "changed",
+          dimensions: ["metadata", "availability"],
+        }
+      : availability;
   const dimensions = changedDimensions(input);
-  if (pyInstallerMetadataUnknown(input)) {
+  if (
+    pyInstallerMetadataUnknown(input) ||
+    asarPackingUnknown(input) ||
+    nodeSeaMetadataUnknown(input)
+  ) {
     if (dimensions.length === 0)
       return {
         ...base,
@@ -398,6 +443,35 @@ const classifyPath = (input: ClassifyPathInput): ArtifactChange | null => {
   return dimensions.length === 0
     ? null
     : { ...base, classification: "changed", dimensions };
+};
+
+type OccurrencePair = Pick<
+  ClassifyPathInput,
+  "leftOccurrence" | "rightOccurrence"
+>;
+
+const asarPackingUnknown = (input: OccurrencePair): boolean =>
+  (input.leftOccurrence?.unpacked === undefined) !==
+  (input.rightOccurrence?.unpacked === undefined);
+
+const asarPackingChanged = (input: OccurrencePair): boolean =>
+  input.leftOccurrence?.unpacked !== undefined &&
+  input.rightOccurrence?.unpacked !== undefined &&
+  input.leftOccurrence.unpacked !== input.rightOccurrence.unpacked;
+
+const nodeSeaMetadataUnknown = (input: OccurrencePair): boolean =>
+  (input.leftOccurrence?.format_metadata?.kind === "node-sea-entry") !==
+  (input.rightOccurrence?.format_metadata?.kind === "node-sea-entry");
+
+const nodeSeaMetadataChanged = (input: OccurrencePair): boolean => {
+  const left = input.leftOccurrence?.format_metadata;
+  const right = input.rightOccurrence?.format_metadata;
+  return (
+    left?.kind === "node-sea-entry" &&
+    right?.kind === "node-sea-entry" &&
+    canonicalJson(nodeSeaEntryDeclaration(left)) !==
+      canonicalJson(nodeSeaEntryDeclaration(right))
+  );
 };
 
 const pyInstallerMetadataUnknown = (input: ClassifyPathInput): boolean =>
@@ -511,6 +585,8 @@ const metadataChanged = (
   left: ArtifactNode,
   right: ArtifactNode,
 ): boolean =>
+  asarPackingChanged(input) ||
+  nodeSeaMetadataChanged(input) ||
   left.media_type !== right.media_type ||
   left.architecture !== right.architecture ||
   left.content_state !== right.content_state ||
