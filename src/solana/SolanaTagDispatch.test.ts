@@ -46,4 +46,19 @@ describe("scanSolanaTagDispatch", () => {
     const words = [word(LDXB, 1, 2, 0, 0), word(JEQ, 1, 0, 1, 0), word(EXIT, 0, 0, 0, 0), word(EXIT, 0, 0, 0, 0)];
     expect(scanSolanaTagDispatch(decode(words))).toEqual([]);
   });
+
+  it("recovers a register-rooted processor match and does not duplicate decoder trees", () => {
+    // if r8 == k goto ARM_k (k = 0..7); else-arm; arms are movs.
+    const words: number[][] = [];
+    for (let k = 0; k < 8; k += 1) words.push(word(JEQ, 8, 0, 9, k));
+    words.push(word(MOV, 0, 0, 0, 99), word(EXIT, 0, 0, 0, 0));
+    for (let k = 0; k < 8; k += 1) words.push(word(MOV, 0, 0, 0, k));
+    words.push(word(EXIT, 0, 0, 0, 0));
+    const trees = scanSolanaTagDispatch(decode(words));
+    expect(trees).toHaveLength(1);
+    expect(trees[0]?.root).toBe("register");
+    expect(trees[0]?.handlers.map((h) => h.tag)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(trees[0]?.handlers[0]?.target).toBe(80);
+    expect(trees[0]?.defaultTargets).toEqual([64]);
+  });
 });

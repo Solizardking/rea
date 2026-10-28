@@ -9,6 +9,10 @@ export interface SolanaTagHandler {
 /** A recovered 1-byte tag dispatch: `ldxb` of instruction data then a
  * compare tree (`jeq`/`jne`/`jgt`/`jsgt`/... against immediates). */
 export interface SolanaTagDispatch {
+  /** `byte-load`: tree over a byte read by `ldxb` (Borsh decode of the tag).
+   * `register`: tree over an already-decoded enum value held in a register
+   * (the processor `match`); `loadAddress` is then the tree root. */
+  readonly root: "byte-load" | "register";
   readonly loadAddress: number;
   readonly tagRegister: number;
   readonly loadBaseRegister: number;
@@ -25,6 +29,8 @@ const COMPARE = new Set([
 const MIN_HANDLERS = 4;
 const SEARCH_WINDOW = 12;
 const MAX_NODES = 4096;
+const REGISTER_MAX = 0xffff;
+const MIN_REGISTER_HANDLERS = 8;
 
 const isByteLoad = (i: SbpfInstruction): boolean =>
   (i.opcode & 0x07) === 0x01 && ((i.opcode >> 3) & 0x03) === 2;
@@ -46,11 +52,12 @@ const walkTree = (
   byAddress: ReadonlyMap<number, number>,
   start: number,
   reg: number,
-): { handlers: Map<number, number>; defaults: Set<number>; compares: number } => {
+  maxValue = 255,
+): { handlers: Map<number, number>; defaults: Set<number>; compares: number; visited: Set<number> } => {
   const handlers = new Map<number, number>();
   const defaults = new Set<number>();
   const visitedCompares = new Set<number>();
-  const stack: [number, Range][] = [[start, [0, 255]]];
+  const stack: [number, Range][] = [[start, [0, maxValue]]];
   let nodes = 0;
   while (stack.length > 0 && nodes < MAX_NODES) {
     nodes += 1;
@@ -81,18 +88,18 @@ const walkTree = (
     let taken: (Range | undefined)[];
     let fall: (Range | undefined)[];
     switch (ins.mnemonic) {
-      case "jeq": taken = [lower(imm, imm)]; fall = [lower(0, imm - 1), lower(imm + 1, 255)]; break;
-      case "jne": fall = [lower(imm, imm)]; taken = [lower(0, imm - 1), lower(imm + 1, 255)]; break;
-      case "jgt": case "jsgt": taken = [lower(imm + 1, 255)]; fall = [lower(0, imm)]; break;
-      case "jge": case "jsge": taken = [lower(imm, 255)]; fall = [lower(0, imm - 1)]; break;
-      case "jlt": case "jslt": taken = [lower(0, imm - 1)]; fall = [lower(imm, 255)]; break;
-      default: taken = [lower(0, imm)]; fall = [lower(imm + 1, 255)]; break;
+      case "jeq": taken = [lower(imm, imm)]; fall = [lower(0, imm - 1), lower(imm + 1, maxValue)]; break;
+      case "jne": fall = [lower(imm, imm)]; taken = [lower(0, imm - 1), lower(imm + 1, maxValue)]; break;
+      case "jgt": case "jsgt": taken = [lower(imm + 1, maxValue)]; fall = [lower(0, imm)]; break;
+      case "jge": case "jsge": taken = [lower(imm, maxValue)]; fall = [lower(0, imm - 1)]; break;
+      case "jlt": case "jslt": taken = [lower(0, imm - 1)]; fall = [lower(imm, maxValue)]; break;
+      default: taken = [lower(0, imm)]; fall = [lower(imm + 1, maxValue)]; break;
     }
     for (const r of fall) if (r) stack.push([index + 1, r]);
     if (target !== undefined && target > index)
       for (const r of taken) if (r) stack.push([target, r]);
   }
-  return { handlers, defaults, compares: visitedCompares.size };
+  return { handlers, defaults, compares: visitedCompares.size, visited: visitedCompares };
 };
 
 /**
@@ -107,6 +114,7 @@ export const scanSolanaTagDispatch = (
   const byAddress = new Map<number, number>();
   instructions.forEach((ins, i) => byAddress.set(ins.address, i));
   const results: SolanaTagDispatch[] = [];
+  const decoded = new Set<number>();
   for (let i = 0; i < instructions.length; i += 1) {
     const load = instructions[i];
     if (load === undefined || !isByteLoad(load)) continue;
@@ -118,13 +126,37 @@ export const scanSolanaTagDispatch = (
       if (writesRegister(ins, load.dst) || (ins.opcode & 0x07) === 0x05) break;
     }
     if (first < 0) continue;
-    const { handlers, defaults, compares } = walkTree(instructions, byAddress, first, load.dst);
+    const { handlers, defaults, compares, visited } = walkTree(instructions, byAddress, first, load.dst);
     if (handlers.size < MIN_HANDLERS) continue;
+    for (const a of visited) decoded.add(a);
     results.push({
+      root: "byte-load",
       loadAddress: load.address,
       tagRegister: load.dst,
       loadBaseRegister: load.src,
       loadOffset: load.offset,
+      compareCount: compares,
+      handlers: [...handlers].map(([tag, target]) => ({ tag, target })).sort((a, b) => a.tag - b.tag),
+      defaultTargets: [...defaults].sort((a, b) => a - b),
+    });
+  }
+  // Register-rooted trees: the processor `match` over an enum value that was
+  // decoded earlier. Roots are compare-on-immediate instructions not reached
+  // as an inner node of a tree already reported.
+  const inner = new Set<number>(decoded);
+  for (let i = 0; i < instructions.length; i += 1) {
+    const ins = instructions[i];
+    if (ins === undefined || inner.has(ins.address)) continue;
+    if (!COMPARE.has(ins.mnemonic) || ins.srcIsRegister) continue;
+    const { handlers, defaults, compares, visited } = walkTree(instructions, byAddress, i, ins.dst, REGISTER_MAX);
+    for (const a of visited) inner.add(a);
+    if (handlers.size < MIN_REGISTER_HANDLERS || defaults.size > 2) continue;
+    results.push({
+      root: "register",
+      loadAddress: ins.address,
+      tagRegister: ins.dst,
+      loadBaseRegister: ins.dst,
+      loadOffset: 0,
       compareCount: compares,
       handlers: [...handlers].map(([tag, target]) => ({ tag, target })).sort((a, b) => a.tag - b.tag),
       defaultTargets: [...defaults].sort((a, b) => a - b),

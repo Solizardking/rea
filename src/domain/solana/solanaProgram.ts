@@ -126,6 +126,7 @@ export const solanaProgramAnalysisSchema = z
     /** 1-byte instruction-tag dispatch trees (Shank/Borsh native programs). */
     tag_dispatch: z.array(
       z.strictObject({
+        root: z.enum(["byte-load", "register"]),
         load_address: byteOffset,
         tag_register: z.int().min(0).max(15),
         load_base_register: z.int().min(0).max(15),

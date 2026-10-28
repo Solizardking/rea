@@ -355,6 +355,7 @@ const analyzeAcquired = (
       constant_register: handler.constantRegister,
     })),
     tag_dispatch: tagDispatch.map((tree) => ({
+      root: tree.root,
       load_address: tree.loadAddress,
       tag_register: tree.tagRegister,
       load_base_register: tree.loadBaseRegister,
