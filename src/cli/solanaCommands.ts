@@ -1,5 +1,8 @@
 import { z } from "incur";
-import { solanaProgramModule } from "../composition/solana.js";
+import {
+  solanaProgramModule,
+  solanaReceiptsModule,
+} from "../composition/solana.js";
 import { logCliCommand } from "../cliLogging.js";
 import type { Logger } from "pino";
 import type { CliInstance } from "./types.js";
@@ -68,6 +71,42 @@ export const registerSolanaCommands = (
             service,
             providerId: "solana-sbpf",
             operation: "analyze_solana_program",
+            signal,
+            detail: "complete",
+            evidenceOutput: options.evidence_output,
+          }),
+        ),
+      ),
+  });
+  const receipts = solanaReceiptsModule.create();
+  cli.command(solanaReceiptsModule.cliCommand, {
+    description:
+      "Bind local-runner receipts to a Solana ELF by SHA-256; unbound or failing claims stay leads",
+    args: z.object({}),
+    options: z.object({
+      elf: localPathStringSchema.describe(
+        "sBPF ELF the receipts claim to have executed",
+      ),
+      receipts: localPathStringSchema.describe(
+        "rea.solana-receipts/v1 JSON file",
+      ),
+      evidence_output: analysisEvidenceDeliveryOptions.evidence_output,
+    }),
+    run: ({ options }) =>
+      withCommandCancellation(async (signal) =>
+        logCliCommand(logger, solanaReceiptsModule.cliCommand, async () =>
+          deliverCliAnalysisEvidence({
+            run: () =>
+              receipts.inspect(
+                {
+                  path: absoluteCallerPath(options.elf),
+                  receipts_path: absoluteCallerPath(options.receipts),
+                },
+                { signal },
+              ),
+            service: receipts,
+            providerId: "solana-receipts",
+            operation: "solana_receipts",
             signal,
             detail: "complete",
             evidenceOutput: options.evidence_output,

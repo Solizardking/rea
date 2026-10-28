@@ -3,7 +3,10 @@ import type { EvidenceMcpServer } from "./EvidenceMcpServer.js";
 import type { SolanaProgramService } from "../application/solana/SolanaProgramService.js";
 import type { EvidenceWriter } from "../application/investigation/InvestigationRecordPort.js";
 import type { EvidenceLookup } from "../application/EvidenceInputResolver.js";
-import { solanaProgramModule } from "../composition/solana.js";
+import {
+  solanaProgramModule,
+  solanaReceiptsModule,
+} from "../composition/solana.js";
 import type { Logger } from "pino";
 import type { WithAdmittedAnalysis } from "./analysisAdmission.js";
 import { createEvidenceToolHandler } from "./contractToolHandler.js";
@@ -30,5 +33,18 @@ export const registerSolanaTools = (
     contract.name,
     applicationToolRegistrationOptions(contract),
     handler(contract),
+  );
+  const receipts = solanaReceiptsModule.create();
+  const receiptsHandler = createEvidenceToolHandler(
+    server,
+    (input, options) => receipts.inspect(input, options),
+    logger,
+    recordEvidence,
+    withAdmittedAnalysis,
+  );
+  server.registerTool(
+    solanaReceiptsModule.contract.name,
+    applicationToolRegistrationOptions(solanaReceiptsModule.contract),
+    receiptsHandler(solanaReceiptsModule.contract),
   );
 };

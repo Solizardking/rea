@@ -2,6 +2,10 @@ import {
   analyzeSolanaProgramInputSchema,
   solanaProgramAnalysisSchema,
 } from "../../domain/solana/solanaProgram.js";
+import {
+  solanaReceiptsInputSchema,
+  solanaReceiptsResultSchema,
+} from "../../domain/solana/solanaReceipts.js";
 import type { ToolContract } from "../toolContractTypes.js";
 import { toolContractMetadata } from "../toolEffects.js";
 import { evidenceResultOf } from "../toolOutputSchemaPrimitives.js";
@@ -31,7 +35,29 @@ export const ANALYZE_SOLANA_PROGRAM_CONTRACT = {
   ],
 } as const satisfies ToolContract;
 
+/** Receipt binding: promotes instruction claims only when local-runner receipts match the artifact SHA-256. */
+export const SOLANA_RECEIPTS_CONTRACT = {
+  name: "solana_receipts",
+  ...toolContractMetadata("solana_receipts"),
+  kind: "artifact-provider",
+  requiresActiveTarget: true,
+  description:
+    'Bind differential receipts (rea.solana-receipts/v1, recorded by a local LiteSVM-style harness) to one Solana sBPF ELF. Hashes the selected ELF and checks it equals the receipts\' artifact_sha256, that the engine is a supported local runtime (litesvm, solana-test-validator, surfpool, mollusk) and that its network is "none". Per instruction tag, a claim becomes receipt-verified only when the binding holds, at least one positive receipt passed and no receipt failed; every other claim is downgraded to lead with the reason. REA never loads the program or replays transactions; it audits recorded receipts.',
+  inputSchema: solanaReceiptsInputSchema,
+  outputSchema: evidenceResultOf(solanaReceiptsResultSchema),
+  examples: [
+    {
+      title: "Bind LiteSVM receipts to a captured ELF",
+      input: {
+        path: "/artifacts/core.so",
+        receipts_path: "/artifacts/receipts.json",
+      },
+    },
+  ],
+} as const satisfies ToolContract;
+
 /** Preserve the default catalog's exact operation and ordering. */
 export const SOLANA_TOOL_CONTRACTS = [
   ANALYZE_SOLANA_PROGRAM_CONTRACT,
+  SOLANA_RECEIPTS_CONTRACT,
 ] as const satisfies readonly ToolContract[];
