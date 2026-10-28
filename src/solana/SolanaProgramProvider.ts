@@ -30,6 +30,7 @@ import {
   isUnknownSbpfInstruction,
 } from "./SbpfDisassembler.js";
 import { scanSolanaDispatch } from "./SolanaDispatch.js";
+import { scanSolanaTagDispatch } from "./SolanaTagDispatch.js";
 import {
   DEFAULT_SOLANA_RPC_URL,
   fetchSolanaProgramElf,
@@ -277,6 +278,7 @@ const analyzeAcquired = (
           textSection.offset,
         );
   const handlers = scanSolanaDispatch(instructions);
+  const tagDispatch = scanSolanaTagDispatch(instructions);
   const limitations = [...BASE_LIMITATIONS];
   if (textSection === undefined)
     limitations.push(
@@ -351,6 +353,15 @@ const analyzeAcquired = (
       branch_target: handler.branchTarget,
       value_register: handler.valueRegister,
       constant_register: handler.constantRegister,
+    })),
+    tag_dispatch: tagDispatch.map((tree) => ({
+      load_address: tree.loadAddress,
+      tag_register: tree.tagRegister,
+      load_base_register: tree.loadBaseRegister,
+      load_offset: tree.loadOffset,
+      compare_count: tree.compareCount,
+      handlers: tree.handlers.map((h) => ({ tag: h.tag, target: h.target })),
+      default_targets: [...tree.defaultTargets],
     })),
     syscalls: {
       dynamic_symbols: undefinedSymbols.map((symbol) => symbol.name).sort(),

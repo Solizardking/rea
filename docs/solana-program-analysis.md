@@ -70,3 +70,14 @@ rea analyze-solana-program --program pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
 - Discriminator candidates are reconstruction leads. Behavior parity with a
   deployed program is established only by differential tests against the
   captured original (the pumpfun-source model), never by this scan alone.
+
+## 1-byte tag dispatch (Shank/Borsh native programs)
+
+`tag_dispatch` lists compare trees over a byte loaded with `ldxb` (the shape
+rustc/LLVM-BPF emits for a `match` on a Borsh enum discriminant; BPF has no
+jump tables). The scan walks the tree with value-range narrowing and reports,
+per tree, the load address, each tag's leaf target, and the default
+(invalid-tag) arm. Inner enum matches also appear; the instruction dispatch is
+the tree whose arity matches the program's IDL. On Metaplex Core the tree at
+`0x1d608` recovers all 42 tags (0..41). `scripts/solana-milestone1.mjs` runs
+the full offline loop (pinned ELF + IDL, LiteSVM receipts, scoreboard).

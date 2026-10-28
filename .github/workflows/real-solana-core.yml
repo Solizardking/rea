@@ -1,0 +1,41 @@
+name: Real offline Solana Core scoreboard
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    paths:
+      - "src/solana/**"
+      - "src/domain/solana/**"
+      - "scripts/solana-milestone1.mjs"
+      - "tests/fixtures/solana/**"
+      - ".github/workflows/real-solana-core.yml"
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  real-solana-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npm ci --no-audit --no-fund
+        working-directory: tests/fixtures/solana/core/receipts
+      - run: npm run compile
+      - run: npx vitest run src/solana src/application/solana
+      # Test time is offline: pinned ELF + pinned IDL + local LiteSVM only.
+      - name: Milestone 1 scoreboard (network disabled)
+        run: unshare -rn node scripts/solana-milestone1.mjs --out "${RUNNER_TEMP}/solana-milestone1"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: solana-core-scoreboard
+          path: ${{ runner.temp }}/solana-milestone1/*.json

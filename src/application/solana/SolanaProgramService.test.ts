@@ -45,6 +45,7 @@ const report: SolanaProgramAnalysis = {
     lddw_constants: 9,
     coverage: "complete",
   },
+  tag_dispatch: [],
   handlers: [
     {
       discriminator: "c9cff3724b6f2fbd",
