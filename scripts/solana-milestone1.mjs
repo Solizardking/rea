@@ -86,7 +86,7 @@ if (!args.includes("--skip-receipts")) {
   check(run.status === 0, "LiteSVM differential receipts all pass");
   receipts = JSON.parse(readFileSync(receiptsOut, "utf8"));
 }
-const passedTags = new Set(receipts.receipts.filter((r) => r.pass && !/negative/.test(r.name)).map((r) => r.tag));
+const passedTags = new Set(receipts.receipts.filter((r) => r.pass && r.kind === "positive").map((r) => r.tag));
 const negativeOob = receipts.receipts.find((r) => r.tag === ixs.length && r.pass);
 
 const entries = ixs.map((ix) => {
@@ -101,7 +101,7 @@ const entries = ixs.map((ix) => {
       idl: `mpl_core.json instructions[${ix.tag}] discriminant=${ix.tag}`,
       decoder: { tree: primary ? hex(primary.load_address) : null, arm: leaf ? hex(leaf.target) : null, note: "Borsh decode of the tag byte (arm parses this variant's args)" },
       processor: arm ? { tree: hex(processor.root), arm: hex(arm.target), via: arm.via ?? "leaf", log_name: arm.log?.name ?? null, log_site: arm.log?.site ?? null, name_matches_idl: named } : null,
-      receipts: receipts.receipts.filter((r) => r.tag === ix.tag).map((r) => ({ name: r.name, pass: r.pass, compute_units: r.compute_units, err: r.err })),
+      receipts: receipts.receipts.filter((r) => r.tag === ix.tag).map((r) => ({ name: r.instruction, kind: r.kind, pass: r.pass, compute_units: r.compute_units, err: r.err })),
     },
   };
 });
@@ -149,7 +149,7 @@ const scoreboard = {
     processor: processor ? { kind: "processor match over decoded enum (register-rooted tree)", root: hex(processor.root), arms: processor.arms.length, named_by_log: processor.named } : null,
   },
   statuses: { lead: "dispatch candidate only", "identity-confirmed": "tag reaches a decoder arm AND a processor arm whose msg!(\"Instruction: X\") log names this IDL variant (or has no log)", "receipt-verified": "identity-confirmed + LiteSVM receipt on the pinned ELF matched IDL/source expectations", "not-dispatch": "8-byte lddw/jeq candidate shown not to be instruction dispatch" },
-  counts, instructions: entries, not_dispatch: notDispatch, receipts_engine: receipts.engine ?? null, pumpfun_regression: pumpfun,
+  counts, instructions: entries, not_dispatch: notDispatch, receipts_engine: receipts.engine ?? null, receipts_artifact_sha256: receipts.artifact_sha256 ?? null, pumpfun_regression: pumpfun,
   verified: failures.length === 0, failures,
 };
 writeFileSync(join(OUT, "scoreboard.json"), `${JSON.stringify(scoreboard, null, 2)}\n`);
