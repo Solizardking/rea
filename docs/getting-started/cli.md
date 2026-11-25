@@ -302,6 +302,13 @@ rea solana-receipts --analysis-path /absolute/path/to/solana-analysis.json --evi
 rea solana-receipts --out-dir /absolute/path/to/batch --evidence-path /absolute/path/to/evidence.json --json
 ```
 
+Bind Certora Prover and Harmonic Aristotle verdicts to the analyzed
+artifact (the tool reads their report files; it never runs a prover):
+
+```bash
+rea solana-formal-verification --analysis-path /absolute/path/to/solana-analysis.json --certora-verdicts-path /absolute/path/to/certora-verdicts.json --aristotle-properties-path /absolute/path/to/aristotle-properties.json --json
+```
+
 ## Native analysis
 
 Inspect embedded Go build metadata without installing Go or configuring a
