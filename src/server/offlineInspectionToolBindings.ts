@@ -202,6 +202,11 @@ export const OFFLINE_INSPECTION_TOOL_BINDINGS = {
       admission: "application",
       run: (input, options) => services.receipts.buildReceipts(input, options),
     },
+    solana_formal_verification: {
+      admission: "application",
+      run: (input, options) =>
+        services.formalVerification.normalize(input, options),
+    },
   })) satisfies Bind<SolanaToolServices>,
   goBinary: ((service, retention) => ({
     inspect_go_binary: {

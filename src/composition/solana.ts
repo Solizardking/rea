@@ -1,9 +1,11 @@
+import { SolanaFormalVerificationService } from "../application/solana/SolanaFormalVerificationService.js";
 import { SolanaProgramService } from "../application/solana/SolanaProgramService.js";
 import { SolanaProgramBatchService } from "../application/solana/SolanaProgramBatchService.js";
 import { SolanaReceiptsService } from "../application/solana/SolanaReceiptsService.js";
 import type { SolanaToolServices } from "../application/solana/SolanaToolServices.js";
 import { SolanaProgramProvider } from "../solana/SolanaProgramProvider.js";
 import { SolanaReceiptsProvider } from "../solana/SolanaReceiptsProvider.js";
+import { SolanaFormalVerificationProvider } from "../solana/SolanaFormalVerificationProvider.js";
 
 /**
  * Compose the in-process Solana analyzer without import-time I/O. The
@@ -32,6 +34,17 @@ export const createSolanaReceiptsService = (): SolanaReceiptsService =>
   new SolanaReceiptsService(new SolanaReceiptsProvider());
 
 /**
+ * Compose the formal-verification normalizer. The environment is read only
+ * for the presence of the Certora and Aristotle CLI credential variables.
+ */
+export const createSolanaFormalVerificationService = (
+  environment: Readonly<NodeJS.ProcessEnv> = process.env,
+): SolanaFormalVerificationService =>
+  new SolanaFormalVerificationService(
+    new SolanaFormalVerificationProvider(environment),
+  );
+
+/**
  * Compose every Solana tool service over one provider stack. Construction
  * performs no acquisition, target I/O or import-time execution.
  */
@@ -41,12 +54,18 @@ export const createSolanaToolServices = (
   const program = createSolanaProgramService(environment);
   const batch = new SolanaProgramBatchService(program);
   const receipts = createSolanaReceiptsService();
+  const formalVerification = createSolanaFormalVerificationService(environment);
   return {
     program,
     batch,
     receipts,
+    formalVerification,
     close: async () => {
-      await Promise.all([batch.close(), receipts.close()]);
+      await Promise.all([
+        batch.close(),
+        receipts.close(),
+        formalVerification.close(),
+      ]);
     },
   };
 };

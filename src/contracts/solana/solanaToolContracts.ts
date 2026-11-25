@@ -8,6 +8,10 @@ import {
   solanaReceiptsInputSchema,
   solanaReceiptsResultSchema,
 } from "../../domain/solana/solanaReceipts.js";
+import {
+  solanaFormalVerificationInputSchema,
+  solanaFormalVerificationResultSchema,
+} from "../../domain/solana/solanaFormalVerification.js";
 import type { ToolContract } from "../toolContractTypes.js";
 import { toolContractMetadata, toolEffects } from "../toolEffects.js";
 import { evidenceResultOf } from "../toolOutputSchemaPrimitives.js";
@@ -120,9 +124,45 @@ export const SOLANA_RECEIPTS_CONTRACT = {
   ],
 } as const satisfies ToolContract;
 
+export const SOLANA_FORMAL_VERIFICATION_CONTRACT = {
+  name: "solana_formal_verification",
+  availability: "standalone",
+  cli: true,
+  ...toolContractMetadata(
+    "solana_formal_verification",
+    toolEffects({ mutatesSession: true, writesFilesystem: true }),
+  ),
+  kind: "artifact-provider",
+  requiresActiveTarget: true,
+  description:
+    "Normalize formal-verification verdicts for a Solana program into one REA record: Certora Prover results (certoraSolanaProver jobs read back with `prover-cli --job-id <id> --verdicts --format json`) and Harmonic Aristotle Lean 4 results (`aristotle properties <project-id> --json`). Certora leaf statuses map rule by rule (any VIOLATED leaf makes the rule violated; verified only when every leaf is VERIFIED; SANITY_FAILED, ERROR, TIMEOUT, RUNNING/PENDING and UNKNOWN stay distinct), Aristotle PROVED/REFUTED/FAILED/IN_PROGRESS map to verified/violated/unresolved/in-progress, and an Aristotle result marked unchecked is no verdict. With analysis_path the record is bound to that solana-analysis.json artifact SHA-256; a declared verified_artifact_sha256 that differs from the analysis is refused rather than bound across artifacts. Writes formal-verification.json exclusively (beside the analysis by default, never overwriting) and returns it: per-engine results with raw statuses and source report SHA-256, totals, the formally_verified list (engine:name, proved under that engine's documented assumptions only), findings (violated and sanity-failed), integrity issues, an explicit not_claimed boundary, and per-engine readiness — whether CERTORAKEY / ARISTOTLE_API_KEY is present (never its value) and the official commands that produce each report. The tool never submits a prover run, never uploads source, and never touches the network.",
+  inputSchema: solanaFormalVerificationInputSchema,
+  outputSchema: evidenceResultOf(solanaFormalVerificationResultSchema),
+  examples: [
+    {
+      title: "Bind Certora verdicts to an analyzed program",
+      input: {
+        analysis_path: "/artifacts/vault/solana-analysis.json",
+        certora_verdicts_path: "/artifacts/vault/certora-verdicts.json",
+      },
+    },
+    {
+      title: "Combine Certora and Aristotle results for one artifact",
+      input: {
+        analysis_path: "/artifacts/vault/solana-analysis.json",
+        verified_artifact_sha256:
+          "51d41542a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899dc209a",
+        certora_verdicts_path: "/artifacts/vault/certora-verdicts.json",
+        aristotle_properties_path: "/artifacts/vault/aristotle-properties.json",
+      },
+    },
+  ],
+} as const satisfies ToolContract;
+
 /** Preserve the default catalog's exact operation and ordering. */
 export const SOLANA_TOOL_CONTRACTS = [
   ANALYZE_SOLANA_PROGRAM_CONTRACT,
   ANALYZE_SOLANA_PROGRAMS_CONTRACT,
   SOLANA_RECEIPTS_CONTRACT,
+  SOLANA_FORMAL_VERIFICATION_CONTRACT,
 ] as const satisfies readonly ToolContract[];
