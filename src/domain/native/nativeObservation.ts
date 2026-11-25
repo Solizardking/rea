@@ -1,7 +1,4 @@
-import {
-  unwrapNativeProperty,
-  invalidNativeOutput,
-} from "./nativeProviderOutput.js";
+import { invalidNativeOutput } from "./nativeProviderOutput.js";
 import { z } from "zod";
 import { procedureIdentitySchema } from "./procedureInfo.js";
 import { AnalysisOutputError } from "../analysisErrorCore.js";
@@ -30,6 +27,20 @@ export type ContainingProcedureResolution = z.infer<
   typeof containingProcedureResolutionSchema
 >;
 
+/** A trace can retain a reference when its provider cannot resolve ownership. */
+export const traceContainingProcedureSchema = z.union([
+  containingProcedureResolutionSchema,
+  z.strictObject({
+    query_address: z.string(),
+    status: z.literal("unavailable"),
+    provider_id: z.string(),
+    reason: z.string(),
+  }),
+]);
+export type TraceContainingProcedure = z.infer<
+  typeof traceContainingProcedureSchema
+>;
+
 /** Validate provider procedure facts before a workflow interprets absence. */
 export const parseContainingProcedureResolution = (
   value: JsonValue,
@@ -55,6 +66,7 @@ export const NATIVE_PRIMITIVE_OBSERVATION_OPERATIONS = [
 export const NATIVE_OBSERVATION_OPERATIONS = [
   ...NATIVE_PRIMITIVE_OBSERVATION_OPERATIONS,
   "get_call_graph",
+  "xrefs",
 ] as const;
 export type NativeObservationOperation =
   (typeof NATIVE_OBSERVATION_OPERATIONS)[number];
@@ -63,6 +75,7 @@ export const nativeObservationSourceSchemas = {
   procedure_address: z.string(),
   procedure_callees: nativeAddressListSchema,
   procedure_callers: nativeAddressListSchema,
+  xrefs: nativeAddressListSchema,
   resolve_containing_procedure: containingProcedureResolutionSchema,
   get_call_graph: nativeCallGraphSchema,
 };
@@ -79,7 +92,7 @@ export const isNativeObservationOperation = (
 ): operation is NativeObservationOperation =>
   NATIVE_OBSERVATION_OPERATIONS.some((supported) => supported === operation);
 
-/** Parse callee/caller strings from direct or wrapped provider results. */
+/** Parse the provider callee/caller address array. */
 export const parseRelatedAddresses = (
   value: JsonValue,
   relation: "callees" | "callers",
@@ -87,9 +100,7 @@ export const parseRelatedAddresses = (
     ? "procedure_callees"
     : "procedure_callers",
 ): Result<readonly string[], AnalysisOutputError> => {
-  const parsed = z
-    .array(z.string())
-    .safeParse(unwrapNativeProperty(value, relation));
+  const parsed = z.array(z.string()).safeParse(value);
   return parsed.success
     ? ok(parsed.data)
     : invalidNativeOutput(operation, `${relation} list`, parsed.error);

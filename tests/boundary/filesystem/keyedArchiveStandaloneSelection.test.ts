@@ -52,7 +52,7 @@ it.skipIf(process.platform === "win32")(
           );
           expect(evidence.subject).toMatchObject({
             local_path: alias,
-            digest: {
+            identity: {
               sha256: createHash("sha256").update(bytes).digest("hex"),
             },
           });
@@ -76,7 +76,19 @@ it.skipIf(process.platform === "win32")(
           await session.execute("inspect_keyed_archive", {
             path: "unrelated.plist",
           }),
-        ).toMatchObject({ ok: false, error: { _tag: "AnalysisInputError" } });
+        ).toMatchObject({
+          ok: false,
+          error: {
+            _tag: "AnalysisInputError",
+            issues: [
+              {
+                path: ["path"],
+                reason: "invalid_value",
+                expected: [alias.split("/").at(-1), "stored.plist"],
+              },
+            ],
+          },
+        });
       }
       await unlink(aliases[1]!);
       await symlink(other, aliases[1]!);
@@ -117,7 +129,7 @@ it.skipIf(process.platform === "win32")(
         ok: false,
         error: {
           reason: "integrity",
-          detail: expect.stringContaining("Active archive digest changed"),
+          integrityCheck: "admitted-identity",
         },
       });
       await truncate(stored, 64 * 1024 * 1024 + 1);

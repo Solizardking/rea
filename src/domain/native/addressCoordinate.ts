@@ -1,13 +1,25 @@
-/** Parse canonical native offsets without discarding their address space. */
+import { OBSERVED_NATIVE_ADDRESS_PATTERN } from "./nativeAddress.js";
+
+/** Parsed observed coordinate retaining optional address-space identity. */
+export interface NativeAddressCoordinate {
+  readonly space: string | null;
+  readonly offset: bigint;
+}
+
+/** Parse observed native offsets without discarding their address space. */
 export const addressCoordinate = (
   value: string,
-): { readonly space: string | null; readonly offset: bigint } | null => {
-  const separator = value.lastIndexOf(":0x");
-  if (separator === 0) return null;
-  const space = separator < 0 ? null : value.slice(0, separator);
-  const offset = separator < 0 ? value : value.slice(separator + 1);
-  if (!/^0x[0-9a-f]+$/u.test(offset)) return null;
-  return { space, offset: BigInt(offset) };
+): NativeAddressCoordinate | null => {
+  // Equivalent to nativeAddressObservationSchema.pipe(nativeAddressCoordinateInputSchema)
+  // because OBSERVED_NATIVE_ADDRESS_PATTERN already enforces uppercase %XX escapes
+  // and lowercase 0x hex, avoiding per-call Zod pipe allocations in sorts and lookups.
+  if (typeof value !== "string" || !OBSERVED_NATIVE_ADDRESS_PATTERN.test(value))
+    return null;
+  const separator = value.lastIndexOf(":") + 1;
+  return {
+    space: separator === 0 ? null : value.slice(0, separator - 1),
+    offset: BigInt(value.slice(separator)),
+  };
 };
 
 /** Return a bounded byte distance between canonical addresses in one space. */

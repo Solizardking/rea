@@ -1,14 +1,9 @@
 import { z } from "zod";
 import { nativeSymbolMetadataSchema } from "./nativeSymbol.js";
 import { analysisStringSchema } from "./nativeString.js";
-import { ok, type Result } from "../result.js";
+import { ok } from "../result.js";
 import { AnalysisOutputError } from "../analysisErrorCore.js";
-import type { JsonValue } from "../jsonValue.js";
-import { jsonObjectSchema } from "../jsonValue.js";
-import {
-  unwrapNativeProperty,
-  invalidNativeOutput,
-} from "./nativeProviderOutput.js";
+import { invalidNativeOutput } from "./nativeProviderOutput.js";
 
 /** Canonical named native observations; same-address alternatives stay separate. */
 export const addressedValueSchema = z.object({
@@ -30,6 +25,13 @@ export const addressedValueSchema = z.object({
       byte_length: z.number().int().min(0),
     })
     .exactOptional(),
+  matched_aliases: z
+    .array(z.string())
+    .min(1)
+    .exactOptional()
+    .describe(
+      "Procedure search only: the procedure's secondary names that matched. value stays its primary name.",
+    ),
 });
 
 /** Canonical row arrays shared by complete delivery and retained source validation. */
@@ -69,17 +71,3 @@ export const analysisBookmarkSchema = z.strictObject({
   address: z.string(),
   name: z.string().nullable(),
 });
-/** Parse a direct or wrapped list when only its cardinality is required. */
-export const parseListCount = (
-  value: JsonValue,
-  property: string,
-  operation = property === "procedures" ? "list_procedures" : "list_strings",
-): Result<number, AnalysisOutputError> => {
-  const unwrapped = unwrapNativeProperty(value, property);
-  const list = z.array(z.unknown()).safeParse(unwrapped);
-  if (list.success) return ok(list.data.length);
-  const map = jsonObjectSchema.safeParse(unwrapped);
-  return map.success
-    ? ok(Object.keys(map.data).length)
-    : invalidNativeOutput(operation, `${property} list`, map.error);
-};

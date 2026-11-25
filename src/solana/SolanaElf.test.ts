@@ -8,7 +8,8 @@ import {
 /**
  * Build a minimal ELF64 sBPF image in memory: header, .text holding one
  * exit word, .rodata holding a syscall string, one undefined and one defined
- * dynamic symbol, then trailing padding beyond the declared extents.
+ * dynamic symbol, a two-entry .rel.dyn, then trailing padding beyond the
+ * declared extents.
  */
 const buildElf = (padding: number): Uint8Array => {
   const text = new Uint8Array(8);
@@ -16,14 +17,15 @@ const buildElf = (padding: number): Uint8Array => {
   const rodata = new TextEncoder().encode("sol_log_\0");
   const dynstr = new TextEncoder().encode("\0sol_log_\0helper\0");
   const shstrtab = new TextEncoder().encode(
-    "\0.text\0.rodata\0.dynsym\0.dynstr\0.shstrtab\0",
+    "\0.text\0.rodata\0.dynsym\0.dynstr\0.rel.dyn\0.shstrtab\0",
   );
   const nameOffsets = {
     text: 1,
     rodata: 7,
     dynsym: 15,
     dynstr: 23,
-    shstrtab: 31,
+    reldyn: 31,
+    shstrtab: 40,
   };
   const headerSize = 64;
   const textOffset = headerSize;
@@ -31,9 +33,11 @@ const buildElf = (padding: number): Uint8Array => {
   const dynsymOffset = rodataOffset + rodata.length;
   const dynsymSize = 72;
   const dynstrOffset = dynsymOffset + dynsymSize;
-  const shstrtabOffset = dynstrOffset + dynstr.length;
+  const reldynOffset = dynstrOffset + dynstr.length;
+  const reldynSize = 32;
+  const shstrtabOffset = reldynOffset + reldynSize;
   const sectionHeaderOffset = shstrtabOffset + shstrtab.length;
-  const sectionCount = 6;
+  const sectionCount = 7;
   const total = sectionHeaderOffset + sectionCount * 64 + padding;
   const bytes = new Uint8Array(total);
   const view = new DataView(bytes.buffer);
@@ -45,7 +49,7 @@ const buildElf = (padding: number): Uint8Array => {
   view.setUint16(54, 56, true);
   view.setUint16(58, 64, true);
   view.setUint16(60, sectionCount, true);
-  view.setUint16(62, 5, true);
+  view.setUint16(62, 6, true);
   bytes.set(text, textOffset);
   bytes.set(rodata, rodataOffset);
   // Two dynamic symbols: null, undefined sol_log_, defined helper.
@@ -59,6 +63,24 @@ const buildElf = (padding: number): Uint8Array => {
   symbol(1, 1, 0);
   symbol(2, 10, 1);
   bytes.set(dynstr, dynstrOffset);
+  // Two relocations in sBPF 16-byte entry form: a call relocation naming
+  // symbol 1 at the .text address, and a 64-bit relocation naming symbol 2.
+  const relocation = (
+    index: number,
+    offset: number,
+    symbolIndex: number,
+    type: number,
+  ): void => {
+    const base = reldynOffset + index * 16;
+    view.setBigUint64(base, BigInt(offset), true);
+    view.setBigUint64(
+      base + 8,
+      (BigInt(symbolIndex) << 32n) | BigInt(type),
+      true,
+    );
+  };
+  relocation(0, 0x120, 1, 10);
+  relocation(1, 0x128, 2, 8);
   bytes.set(shstrtab, shstrtabOffset);
   const section = (
     index: number,
@@ -85,7 +107,8 @@ const buildElf = (padding: number): Uint8Array => {
   section(2, nameOffsets.rodata, 1, 2, 0x128, rodataOffset, rodata.length);
   section(3, nameOffsets.dynsym, 11, 0, 0, dynsymOffset, dynsymSize, 4, 24);
   section(4, nameOffsets.dynstr, 3, 0, 0, dynstrOffset, dynstr.length);
-  section(5, nameOffsets.shstrtab, 3, 0, 0, shstrtabOffset, shstrtab.length);
+  section(5, nameOffsets.reldyn, 9, 0, 0, reldynOffset, reldynSize, 3, 16);
+  section(6, nameOffsets.shstrtab, 3, 0, 0, shstrtabOffset, shstrtab.length);
   return bytes;
 };
 
@@ -101,6 +124,7 @@ it("parses ELF64 sBPF headers, sections and dynamic symbols", () => {
     ".rodata",
     ".dynsym",
     ".dynstr",
+    ".rel.dyn",
     ".shstrtab",
   ]);
   expect(solanaTextSection(image)?.name).toBe(".text");
@@ -114,6 +138,14 @@ it("parses ELF64 sBPF headers, sections and dynamic symbols", () => {
   expect(image.trailingBytes).toBe(0);
 });
 
+it("parses relocation entries with symbol index and type split from r_info", () => {
+  const image = parseSolanaElf(buildElf(0));
+  expect(image.relocations).toEqual([
+    { offset: 0x120, symbolIndex: 1, type: 10 },
+    { offset: 0x128, symbolIndex: 2, type: 8 },
+  ]);
+});
+
 it("reports bytes beyond the ELF-declared extents as trailing", () => {
   expect(parseSolanaElf(buildElf(4096)).trailingBytes).toBe(4096);
 });
@@ -124,4 +156,32 @@ it("rejects non-ELF and 32-bit carriers instead of guessing", () => {
   elf32[4] = 1;
   expect(() => parseSolanaElf(elf32)).toThrow(SolanaElfFailure);
   expect(() => parseSolanaElf(new Uint8Array(16))).toThrow(SolanaElfFailure);
+});
+
+it("rejects header tables that extend past the capture before reading entries", () => {
+  const oversized = buildElf(0);
+  new DataView(oversized.buffer).setUint16(60, 0xffff, true);
+  expect(() => parseSolanaElf(oversized)).toThrow(/extends past/);
+
+  const zeroEntrySize = buildElf(0);
+  new DataView(zeroEntrySize.buffer).setUint16(58, 0, true);
+  expect(() => parseSolanaElf(zeroEntrySize)).toThrow(/entry size 0/);
+
+  const programHeaders = buildElf(0);
+  const view = new DataView(programHeaders.buffer);
+  view.setBigUint64(32, 64n, true);
+  view.setUint16(56, 0xffff, true);
+  expect(() => parseSolanaElf(programHeaders)).toThrow(/extends past/);
+});
+
+it("rejects a symbol table whose declared size runs past the capture", () => {
+  const elf = buildElf(0);
+  const view = new DataView(elf.buffer);
+  const sectionHeaderOffset = Number(view.getBigUint64(40, true));
+  for (let index = 0; index < 7; index += 1) {
+    const base = sectionHeaderOffset + index * 64;
+    if (view.getUint32(base + 4, true) === 11)
+      view.setBigUint64(base + 32, 1n << 40n, true);
+  }
+  expect(() => parseSolanaElf(elf)).toThrow(SolanaElfFailure);
 });

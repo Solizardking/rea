@@ -1,103 +1,86 @@
 ---
 name: solana-decompile
-description: Analyze a deployed Solana sBPF program with REA's analyze_solana_program — capture its ELF (solana program dump, local .so, or read-only fetch by program id), recover Anchor discriminator candidates, syscall surface and strings, cross-check against an IDL, and hand leads to differential verification. Use when a claim depends on a Solana program's deployed bytecode rather than available or trusted source; skip it for ordinary source-repository analysis.
+description: Analyze and reconstruct Solana sBPF programs with REA — capture a deployed program's ELF by id or analyze a local capture, recover Anchor discriminator candidates and the syscall surface, and hand the leads to differential verification. Use when a claim depends on a Solana program's deployed bytecode rather than available source.
 ---
 
 # Solana decompile
 
-Use when the ground truth is a deployed Solana program: its source is
-unavailable, untrusted, or suspected to differ from the on-chain ELF.
-
-## Rule: a lead, never proof
-
-Every handler row is a reconstruction **lead**. It does not establish
-behavior, account layouts, or arithmetic. A handler counts as recovered only
-when a rebuilt implementation passes differential tests against the captured
-original. Never rename an unmatched candidate by guesswork.
-
-## Call it
-
-MCP tool `analyze_solana_program` (input is a strict object; pick exactly one source):
-
-| Input        | Type                        | Notes                                                                                      |
-| ------------ | --------------------------- | ------------------------------------------------------------------------------------------ |
-| `path`       | absolute local path         | sBPF ELF to analyze. Mutually exclusive with `program_id`.                                 |
-| `program_id` | base58 pubkey (32–44 chars) | Fetched read-only via JSON-RPC (BPF Loader Upgradeable → ProgramData). Requires `out_dir`. |
-| `rpc_url`    | URL                         | Only with `program_id`. Default: `REA_SOLANA_RPC_URL`, else public mainnet.                |
-| `out_dir`    | absolute local path         | Receives `<program_id>.so` (program-id intake), `solana-analysis.json`, `disassembly.txt`. |
-
-CLI equivalent:
-
-```sh
-rea analyze-solana-program --elf ./pump_amm.so --out ./out
-rea analyze-solana-program --program <PROGRAM_ID> --out ./out [--rpc-url <URL>]
-```
-
-The tool never executes the target, builds transactions, or touches a wallet.
-RPC intake is the only network step.
+Use REA's `analyze_solana_program` when the ground truth is a deployed Solana
+program: its source is unavailable, untrusted, or suspected to differ from
+the deployed ELF. Do not use it for ordinary source-repository analysis.
 
 ## Workflow
 
-1. **Capture.** Prefer a pinned local capture when byte identity matters:
-   `solana program dump <PROGRAM_ID> ./program.so` (Solana CLI), then pass
-   `path`/`--elf`. Otherwise fetch by `program_id` with an `out_dir`.
-2. **Pin identity.** Record `artifact.sha256`, `artifact.bytes`, and, for RPC
-   intake, `artifact.slot` and `artifact.program_data_account`. SHA-256 covers
-   the whole file, including trailing account-capacity padding
-   (`elf.trailing_bytes`), so compare captures only by the same method.
-3. **Check decode health.** `disassembly.coverage` should be `complete` and
-   `disassembly.unknown_opcodes` should be 0. Otherwise treat every downstream
-   row as suspect.
-4. **Read the dispatch map.** Each `handlers[]` row has `discriminator`
-   (16 hex chars, little-endian bytes), `constant_address`,
-   `constant_file_offset`, `comparison_address`, `branch` (`jeq`/`jne`),
-   `branch_target` (entry into the handler body), and the two registers.
-5. **Cross-check with the IDL if one exists.** For each instruction name,
-   compute `sha256("global:<instruction_name>")[..8]` (accounts use
-   `account:<Name>`) and match it against `discriminator`. Label matches by
-   name; leave the rest as `candidate`.
-6. **Survey the surface.** `syscalls.dynamic_symbols` lists the `sol_*`
-   syscalls imported; `strings.relevant` gives bounded `.rodata` strings
-   (error messages, seeds, log text) with file offsets.
-7. **Hand off.** Rebuild or write the candidate handler, run it beside the
-   captured original in a local VM (LiteSVM/Surfpool) over fixtures from real
-   transactions, and compare account bytes, return data and errors. Only
-   passing differential receipts promote a lead to recovered.
+1. **Capture.** Prefer an existing local capture when byte identity with a
+   known on-chain state matters. Otherwise fetch by program id:
+   `rea analyze-solana-program --program-id <id> --out-dir <dir>` (or the MCP tool
+   with `program_id` + `out_dir`). Intake is read-only `getAccountInfo` at
+   finalized commitment through the BPF Loader Upgradeable ProgramData
+   layout; the fetched ELF lands at `<out_dir>/<program_id>.so` (the output
+   directory must be absent or empty). Record the
+   returned artifact SHA-256 and slot — they name exactly what you analyzed.
+2. **Analyze.** Run the analyzer on the ELF (`--path <path>`, optionally
+   `--out-dir <dir>`, absent or empty, for `solana-analysis.json` and the full `disassembly.txt`).
+   Read the Evidence: ELF sections/entrypoint, disassembly counts, undefined
+   dynamic symbols (the `sol_*` syscall surface), bounded `.rodata` strings,
+   and the handler candidate table.
+3. **Map discriminators to candidate handlers.** Each handler row is an
+   Anchor-style lead recovered from the `lddw` constant + register-compare
+   dispatch idiom: discriminator bytes, constant/comparison addresses, and
+   the handler entry (branch target for `jeq`, fallthrough for `jne`). When an Anchor IDL or
+   source names are available, confirm a lead by checking
+   `sha256("global:<instruction_name>")[..8]` against the discriminator
+   (account discriminators use the `account:` prefix). Leads that match no
+   name stay labeled candidates — never rename them by guesswork.
+4. **Hand off to differential verification.** Decompilation output is a
+   reconstruction lead, never proof. For deeper decompilation, produce the
+   handoff artifact first (`--handoff`, or `handoff: true`; add
+   `--instruction-names` with the IDL instruction names so confirmed handlers
+   are named): the analyzer writes `<out_dir>/handoff/` containing the
+   pinned ELF copy at `handoff/elf/` (byte-identical; verify its SHA-256 against
+   `handoff.json` before use), `handoff.json` (pinned identity, the full
+   handler table, dispatch coverage, and the verified syscall surface),
+   and `HANDOFF.md` — an analyst brief splitting known (observed/verified)
+   from candidates (IDL-confirmed vs unnamed leads) from unknown. Feed
+   that pinned ELF to REA's Ghidra/IDA native workflows; the analyzer
+   never invokes them itself. Following the pumpfun-source model: rebuild
+   or write the candidate implementation, then run it side-by-side with
+   the captured original in a local VM (LiteSVM/Surfpool) over fixtures
+   derived from real transactions, and compare resulting account bytes,
+   return data, and errors. A handler counts as recovered only when its
+   differential receipts pass; the discriminator scan alone does not
+   establish behavior, account layouts, or arithmetic.
+5. **Record the receipts.** Turn the differential outcome into a paper
+   trail with `rea solana-receipts` (MCP `solana_receipts`): point it at
+   the analysis (`--analysis-path <solana-analysis.json>` or `--out-dir <dir>` —
+   a batch out_dir works too) and an evidence JSON naming, per handler,
+   the verdict (`recovered` / `failed` / `not-a-handler`), the VM, the
+   evidence refs, and the fixture counts as recorded — or a
+   `fixtures_note` stating the as-recorded basis where counts live only
+   in aggregate corpora. The builder binds evidence to the artifact by
+   SHA-256 and refuses a mismatch. Read the returned `receipts.json`:
+   a candidate reads `recovered` only on complete all-pass counts or an
+   explicit as-recorded note, unsupported recovered claims are downgraded
+   to `lead` and flagged in the summary issues, unmatched evidence is
+   reported as orphans, and everything untested stays a `lead`. Those
+   verdicts — not the scan, not the differential run alone — are what a
+   "recovered" claim may cite.
 
-## Interpreting output
+## Boundaries
 
-- More candidates than real instructions is normal: any 64-bit constant
-  compared against a register (e.g. bitmasks) can appear. IDL matches separate them.
-- An empty `handlers` list is an unknown, not a negative result. The program may
-  use table dispatch or split compares, or it may not be Anchor at all.
-- `call` immediates are loader-resolved hashes. Use the dynamic-symbol list
-  instead of inventing syscall names.
-- Read `limitations[]` in every report; it records per-run caveats.
-
-## Known limits
-
-- Only the `lddw` constant + register-compare (`jeq`/`jne`, within 8
-  instructions) dispatch idiom. Table dispatch, split 32-bit compares and
-  computed jumps aren't recovered.
-- Linear-sweep disassembly only. No sBPF→Rust lifting, types, control flow
-  or account layouts.
-- One program per invocation.
-
-## Worked example: pump_amm (figures as reported by PR #1)
-
-Input: `{ "path": "/artifacts/pump_amm.so" }` (or `program_id`
-`pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` with `out_dir`).
-
-As reported by the PR:
-
-- ELF sha256 `6a7ad34596d83b4c435b32f458a56e718e9f82eb4ad38e4316616d15d24d8ff7`.
-- 139,524 instructions decoded, 0 unknown opcodes. 14 `sol_*` syscall symbols.
-- 55 handler candidates against 38 real handlers.
-- `create_config` → discriminator `c9cff3724b6f2fbd`, constant 900392,
-  comparison 900408, branch target 901912. This matches pumpfun-source's
-  independent IDL-based dispatch map.
-- A live fetch by program id returned an ELF byte-identical to the capture.
-
-Next step from here: confirm `sha256("global:create_config")[..8]` equals
-`c9cff3724b6f2fbd`, then differentially test a rebuilt `create_config` before
-calling it recovered.
+- The analyzer never executes the target, builds transactions, or touches a
+  wallet. RPC intake is the only network step and is read-only.
+- Split 32-bit compares and read-only jump tables are recovered as
+  labeled candidates (`split-compare` / `table-dispatch`), with the
+  dispatch coverage block counting each method. Computed jumps matching
+  no verified idiom are counted as unresolved, never guessed; an empty
+  handler table is an unknown, not a negative result.
+- `call` immediates are resolved only when they verify: an ELF relocation
+  naming the site, exactly one Murmur3-32 hash candidate (the hash the
+  loader substitutes for a syscall name), or an exact defined-symbol
+  target. Everything else stays an unresolved immediate — never a guessed
+  name. Each resolved site records its basis in the Evidence.
+- Full sBPF-to-Rust lifting is out of scope. For deeper decompilation, feed
+  the captured ELF (identity pinned by the Evidence SHA-256) to Ghidra/IDA
+  through REA's native workflows and treat their output with the same
+  lead-then-verify discipline.
