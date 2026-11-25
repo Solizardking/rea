@@ -1,3 +1,8 @@
+---
+name: ree
+description: Reverse engineer any target (firmware, APKs, desktop apps, websites, Solana programs) evidence-first with the REA hub in the Solizardking fork plus specialist engines like GhidraMCP and mitmproxy. Use when asked to reverse engineer, decompile, audit or explain how something works end to end, including Solana programs that need differential or formal verification.
+---
+
 # REE — Reverse Engineer Everything
 
 - REE is the user's reverse engineering method. It pairs the REA hub from his fork (github.com/Solizardking/rea, cloned at `~/workspace/rea`) with the device workflow from @cabbitar's setup article (x.com/cabbitar/status/2119392619327590507, Nov 8 2026).
@@ -14,9 +19,9 @@
 
 - Install or refresh the hub with `npx rea-agents setup` (needs Node.js 22.x). Update later with `npx rea-agents@latest setup`.
 
-- Use the fork, not upstream, for the user's work. His fork carries the Solana domain (`src/solana`) with batch program analysis, the deep-decompiler handoff and differential-verification receipts, which upstream morluto/rea does not have.
+- Use the fork, not upstream, for the user's work. His fork carries the Solana domain (`src/solana`) with batch program analysis, the deep-decompiler handoff and differential-verification receipts, and the Certora/Aristotle formal-verification report (`solana_formal_verification`, see the `solana-formal-verification` skill).
 
-- The upstream REA skill shipped in the repo lives at `~/workspace/rea/skills/reverse-engineer-anything`. Read it for the full MCP tool catalog before inventing calls.
+- The REA skill shipped in the repo lives at `.agents/skills/reverse-engineer-anything`. Read it for the full MCP tool catalog before inventing calls.
 
 ## Set up the workspace
 
@@ -44,7 +49,7 @@
 
 - Websites and web apps: crawl the public surface, read the shipped JavaScript bundles, and map the API calls the client actually makes. The user's bubblemaps.io and percolator-launch teardowns followed this route.
 
-- Solana programs: use the fork's `src/solana` domain. Pull the program account and its ELF through the user's RPC helpers (see TOOLS.md), recover instruction discriminators and account layouts, and keep the corpus in the pumpfun-source style tree (audit, binaries, docs, evidence, localnet, outputs, programs, repro, research, scripts).
+- Solana programs: use the fork's `src/solana` domain. Capture the ELF with `analyze_solana_program` (read-only RPC by program id, or a local `.so`), recover instruction discriminators and account layouts, and keep the corpus in the pumpfun-source style tree (audit, binaries, docs, evidence, localnet, outputs, programs, repro, research, scripts).
 
 ## Run the analysis loop
 
@@ -56,7 +61,7 @@
 
 - Turn findings into a spec. From `notes/findings.md`, write `notes/SPEC.md` with inputs, outputs and edge cases in plain words.
 
-- On Solana, run the loop as pin capture, static recovery, interface synthesis, state recovery, then differential verification, and keep an evidence scoreboard of what is proven versus assumed.
+- On Solana, run the loop as pin capture, static recovery, interface synthesis, state recovery, then differential verification (`solana_receipts`) and, where proofs are wanted, formal verification bound to the same artifact (`solana_formal_verification`), and keep an evidence scoreboard of what is proven versus assumed.
 
 ## Verify and rebuild
 
@@ -65,16 +70,6 @@
 - Verify by differential testing where possible. Run the recovered behavior against the real target or a localnet fork and record where they diverge.
 
 - Rebuild clean-room when the user wants a feature recreated. Work from visitor-visible behavior (screenshots, layout, observable I/O) by default, and read code directly only for the user's own private targets.
-
-## Available connectors
-
-- [GitHub](/opt/hatch/connectors/github/CONNECTOR.md) for reading the fork, the pumpfun-source corpus and REA receipts pushed to the user's repos.
-
-- [Helius](~/workspace/custom-connectors/custom.legacy-helius/CONNECTOR.md) for Solana program accounts, transaction history and DAS reads during on-chain teardowns.
-
-- Use `muse.connector_search` to find other connectors and `muse.skill_search` to find related skills.
-
-- If nothing here fits, look on the web for a maintained API or MCP server and set it up with [Custom Connectors and MCPs](/opt/muse/skills/custom-connector-setup/SKILL.md), or build a custom connector.
 
 ## Websites
 

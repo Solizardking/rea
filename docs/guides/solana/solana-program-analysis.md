@@ -187,6 +187,48 @@ rea solana-receipts --out-dir ./batch --evidence-path ./evidence.json --json
     entries claiming one handler, or an entry whose name and
     discriminator disagree, fail the build for that program.
 
+## Formal verification
+
+Differential receipts cover the fixtures that were run. For claims over all
+inputs, prove rules or properties with a formal engine and bind the verdicts
+to the analyzed artifact with `solana_formal_verification` (CLI:
+`rea solana-formal-verification`). The tool reads report files you produced;
+it never submits a prover run, uploads source, or reads a credential value.
+
+| Engine                                                                                          | Produce the report                                                                                                                                                                      | Credential (env only) |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| [Certora Solana Prover](https://docs.certora.com/en/latest/docs/solana/usage.html) (CVLR rules) | `certoraSolanaProver <program.so> --rule <rule> ...`, then [`prover-cli`](https://github.com/Certora/ProverCLI) `--job-id <id> --verdicts --format json --output certora-verdicts.json` | `CERTORAKEY`          |
+| [Harmonic Aristotle](https://aristotle.harmonic.fun/docs/installation) (Lean 4)                 | `aristotle submit "<goal>" --project-dir <crate> --wait`, then `aristotle properties <project-id> --json`                                                                               | `ARISTOTLE_API_KEY`   |
+
+```bash
+rea solana-formal-verification \
+  --analysis-path /abs/out/solana-analysis.json \
+  --verified-artifact-sha256 <sha256 of the .so the prover ran on> \
+  --certora-verdicts-path /abs/certora-verdicts.json \
+  --aristotle-properties-path /abs/aristotle-properties.json --json
+```
+
+- **Binding.** With `analysis_path` the record is bound to that analysis'
+  artifact SHA-256. A declared `verified_artifact_sha256` that differs is
+  refused. Without either, the report says the verdicts are unbound.
+- **Verdicts.** Certora rules are `verified` only when every leaf check is
+  VERIFIED; any VIOLATED leaf makes the rule `violated`; SANITY_FAILED,
+  ERROR, TIMEOUT, RUNNING/PENDING and UNKNOWN stay distinct. Aristotle
+  PROVED/REFUTED/FAILED/IN_PROGRESS map to verified/violated/unresolved/
+  in-progress, and a result Aristotle marks `unchecked` is no verdict.
+- **Output.** `formal-verification.json` is created exclusively (beside the
+  analysis by default; never overwritten) with per-engine results and raw
+  statuses, the source report SHA-256s, `formally_verified` and `findings`
+  lists, integrity `issues`, a `not_claimed` boundary, and `readiness`
+  (whether each engine's credential variable is present, never its value).
+- **Engines are adapters.** `FormalEngineAdapter` in
+  `src/solana/SolanaFormalVerification.ts` maps one engine's report to REA
+  verdicts; another prover is a new adapter, not a new workflow.
+
+The [`solana-formal-verification` skill](../../../.agents/skills/solana-formal-verification/SKILL.md)
+covers the full method: pinning bytes to source, writing the spec, CVLR and
+Lean 4 (QEDGen) proof patterns, and honest verdict reporting.
+
 ## Limitations
 
 - Dispatch idioms outside the three recovered shapes (and computed jumps
@@ -198,3 +240,7 @@ rea solana-receipts --out-dir ./batch --evidence-path ./evidence.json --json
 - Discriminator candidates are reconstruction leads. Behavior parity with a
   deployed program is established only by differential tests against the
   captured original (the pumpfun-source model), never by this scan alone.
+- A formally verified rule holds only under the engine's documented
+  assumptions and only for the artifact it is bound to; it does not cover
+  off-chain components, ZK circuits, trusted setups or deployment
+  configuration.

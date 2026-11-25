@@ -193,7 +193,15 @@ or build and test an implementation. The CLI uses the same workflows.
 ## What you can analyze
 
 REA covers native binaries, JavaScript and Electron apps, websites, .NET
-assemblies, Android apps, firmware, and recorded runtime and network activity.
+assemblies, Android apps, firmware, Solana sBPF programs, and recorded runtime
+and network activity.
+
+Solana programs get a full evidence chain: read-only capture by program id,
+dispatch and syscall recovery, a deep-decompiler handoff, differential
+receipts, and formally verified claims from the Certora Solana Prover or
+Harmonic Aristotle bound to the same artifact SHA-256. See
+[Solana sBPF program analysis](docs/guides/solana/solana-program-analysis.md)
+and the [`solana-formal-verification` skill](.agents/skills/solana-formal-verification/SKILL.md).
 
 [Supported targets and requirements](docs/reference/supported-targets.md)
 

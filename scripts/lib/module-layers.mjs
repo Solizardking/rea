@@ -376,6 +376,7 @@ export const ENTRY_FILES = Object.freeze(
       ],
       nuget: ["NugetNupkgProvider.ts", "NugetNupkgProviderIdentity.ts"],
       solana: [
+        "SolanaFormalVerificationProvider.ts",
         "SolanaProgramProvider.ts",
         "SolanaProviderIdentity.ts",
         "SolanaReceiptsProvider.ts",

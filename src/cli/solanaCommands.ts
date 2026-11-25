@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import {
+  createSolanaFormalVerificationService,
   createSolanaProgramBatchService,
   createSolanaProgramService,
   createSolanaReceiptsService,
@@ -19,6 +20,13 @@ import {
 import type { CliInstance } from "./types.js";
 
 const PROVIDER_ID = SOLANA_PROGRAM_PROVIDER_IDENTITY.id;
+/** The caller path recorded as the formal-verification command's subject, in preference order. */
+const FORMAL_PRIMARY_PATHS = [
+  "analysis_path",
+  "certora_verdicts_path",
+  "aristotle_properties_path",
+  "out_path",
+] as const;
 
 /**
  * Record the caller's own spelling of whichever path selected the program:
@@ -160,5 +168,57 @@ export const registerSolanaCommands = (
       PROVIDER_ID,
       "evidence_path",
     ),
+  );
+
+  registerContractCommand(
+    cli,
+    logger,
+    contractNamed(SOLANA_TOOL_CONTRACTS, "solana_formal_verification"),
+    {
+      description:
+        "Normalize Certora Prover and Harmonic Aristotle verdict reports for a Solana program, bound to its analyzed artifact",
+      callerPaths: [
+        "analysis_path",
+        "certora_verdicts_path",
+        "aristotle_properties_path",
+        "out_path",
+      ],
+      fields: {
+        analysis_path: {
+          description: "solana-analysis.json of the program the reports verify",
+        },
+        verified_artifact_sha256: {
+          description:
+            "SHA-256 of the artifact the prover runs used; must match the analysis",
+        },
+        certora_verdicts_path: {
+          description:
+            "prover-cli --job-id <id> --verdicts --format json output",
+        },
+        aristotle_properties_path: {
+          description: "aristotle properties <project-id> --json output",
+        },
+        out_path: {
+          description:
+            "New report path; defaults to formal-verification.json beside the analysis",
+        },
+      },
+    },
+    (input: unknown, context: ContractCommandContext) => {
+      const service = () => {
+        const formal = createSolanaFormalVerificationService(environment);
+        return {
+          inspect: (value: unknown, options?: { signal?: AbortSignal }) =>
+            formal.normalize(value, options),
+          close: () => formal.close(),
+        };
+      };
+      const primary = FORMAL_PRIMARY_PATHS.find(
+        (field) => context.callerInputs[field] !== undefined,
+      );
+      return primary === undefined
+        ? analyzeWithService(service, PROVIDER_ID)(input, context)
+        : inspectWithService(service, PROVIDER_ID, primary)(input, context);
+    },
   );
 };

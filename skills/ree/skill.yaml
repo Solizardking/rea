@@ -1,5 +1,0 @@
-name: "local_ree"
-title: "REE — Reverse Engineer Everything"
-description: "Reverse engineer any target (firmware, APKs, desktop apps, websites, Solana programs) with evidence using the REA hub in the user's fork plus specialist engines like GhidraMCP and mitmproxy. Use when the user asks to reverse engineer, decompile, audit or understand how something works."
-category: "Work and knowledge"
-include_in_prompt: true
