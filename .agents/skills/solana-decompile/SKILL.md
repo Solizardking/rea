@@ -66,6 +66,14 @@ the deployed ELF. Do not use it for ordinary source-repository analysis.
    verdicts — not the scan, not the differential run alone — are what a
    "recovered" claim may cite.
 
+## Formal verification
+
+Differential receipts show a rebuilt handler behaves like the original on
+the fixtures run. For proofs over all inputs, use the
+`solana-formal-verification` skill: prove rules with the Certora Solana
+Prover or properties with Harmonic Aristotle, then bind the verdicts to this
+same artifact SHA-256 with `solana_formal_verification`.
+
 ## Boundaries
 
 - The analyzer never executes the target, builds transactions, or touches a
