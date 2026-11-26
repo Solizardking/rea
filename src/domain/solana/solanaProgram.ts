@@ -120,6 +120,9 @@ export const solanaProgramAnalysisSchema = z
       section_header_count: z.int().nonnegative(),
       /** File bytes beyond the extents declared by the ELF headers. */
       trailing_bytes: byteOffset,
+      /** sBPF bytecode version from e_flags (decides the callx register field). */
+      e_flags: z.int().nonnegative(),
+      sbpf_version: z.int().nonnegative().nullable(),
       sections: z.array(sectionSchema),
     }),
     disassembly: z.strictObject({

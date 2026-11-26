@@ -9,9 +9,13 @@ signs, or broadcasts a transaction.
 ```sh
 rea analyze-solana-program --path ./pump_amm.so --json
 rea analyze-solana-program --program-id pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA --out-dir ./pump_amm --json
-rea analyze-solana-programs --items '[{"path":"./pump.so"},{"path":"./pump_amm.so"}]' --out-dir ./batch --json
+rea analyze-solana-programs --items "[{\"path\":\"$PWD/pump.so\"},{\"path\":\"$PWD/pump_amm.so\"}]" --out-dir ./batch --json
 rea analyze-solana-programs --dir ./captures --out-dir ./batch --json
 ```
+
+Paths inside `--items` are JSON values validated by the tool contract, so
+they must be absolute; `--dir` and `--out-dir` are resolved against the
+current directory.
 
 `analyze_solana_programs` / `analyze-solana-programs` runs the same
 single-program workflow over a mixed list of local ELFs and program ids
@@ -119,6 +123,13 @@ coverage, per-item analysis path, and status or error.
 - Disassembly is a linear sweep by the bundled sBPF decoder
   (`rea-sbpf-decoder`). It is not a Ghidra/IDA-grade lift: no control-flow
   recovery, Rust source, types, or account layouts are produced.
+- `elf.e_flags` keeps the raw ELF flags and `elf.sbpf_version` the version
+  they declare (0–4, or 2 for the legacy `0x20` flag). An unrecognized
+  declaration reports `sbpf_version: null` and a limitation; decoding then
+  uses version 0 rules, which select the `callx` register field.
+- Distinct dynamic-symbol names are decoded once each, up to the fixed
+  16 MiB `solana-elf-symbol-name-bytes` allowance; exceeding it is a named
+  resource refusal, not a malformed-ELF verdict.
 
 ## Differential receipts
 
