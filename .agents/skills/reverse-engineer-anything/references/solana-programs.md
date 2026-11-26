@@ -1,9 +1,4 @@
----
-name: solana-decompile
-description: Analyze and reconstruct Solana sBPF programs with REA — capture a deployed program's ELF by id or analyze a local capture, recover Anchor discriminator candidates and the syscall surface, and hand the leads to differential verification. Use when a claim depends on a Solana program's deployed bytecode rather than available source.
----
-
-# Solana decompile
+# Solana programs
 
 Use REA's `analyze_solana_program` when the ground truth is a deployed Solana
 program: its source is unavailable, untrusted, or suspected to differ from
@@ -65,14 +60,6 @@ the deployed ELF. Do not use it for ordinary source-repository analysis.
    reported as orphans, and everything untested stays a `lead`. Those
    verdicts — not the scan, not the differential run alone — are what a
    "recovered" claim may cite.
-
-## Formal verification
-
-Differential receipts show a rebuilt handler behaves like the original on
-the fixtures run. For proofs over all inputs, use the
-`solana-formal-verification` skill: prove rules with the Certora Solana
-Prover or properties with Harmonic Aristotle, then bind the verdicts to this
-same artifact SHA-256 with `solana_formal_verification`.
 
 ## Boundaries
 
